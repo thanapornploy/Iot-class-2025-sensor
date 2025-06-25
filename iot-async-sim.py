@@ -5,6 +5,11 @@ import random
 from aiomqtt import Client
 import os
 from datetime import datetime
+import sys
+
+if sys.platform.lower() == "win32" or os.name.lower() == "nt":
+    from asyncio import set_event_loop_policy, WindowsSelectorEventLoopPolicy
+    set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 
 # Load environment variables (useful when working locally)
 from dotenv import load_dotenv
