@@ -6,22 +6,42 @@ import json
 import time
 import sys
 import os
+import logging
+
 
 # Load environment variables (useful when working locally)
 from dotenv import load_dotenv
 load_dotenv(os.path.dirname(os.path.abspath(__file__))+"/.env")
 
+
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "iot-frames-model")
+MQTT_BROKER = os.getenv("MQTT_BROKER", "192.168.1.103")
+MQTT_PORT = os.getenv("MQTT_PORT", "1883")
+MQTT_QOS = os.getenv("MQTT_QOS", "1")
+UID = os.getenv("UID", "123456789")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Logggin env
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_str, logging.INFO)
+
+logging.basicConfig(
+    level=log_level,
+    format='[%(asctime)s] [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
 def mqtt_protocol_version():
     if os.environ["MQTT_VERSION"] == "3.1":
-        print("Using MQTT version 3.1")
+        logging.info("Using MQTT version 3.1")
         return paho.MQTTv31
     if os.environ["MQTT_VERSION"] == "3.1.1":
-        print("Using MQTT version 3.1.1")
+        logging.info("Using MQTT version 3.1.1")
         return paho.MQTTv311
     if os.environ["MQTT_VERSION"] == "5":
-        print("Using MQTT version 5")
+        logging.info("Using MQTT version 5")
         return paho.MQTTv5
-    print("Defaulting to MQTT version 3.1.1")
+    logging.info("Defaulting to MQTT version 3.1.1")
     return paho.MQTTv311
 
 def configure_authentication(mqtt_client):
@@ -30,17 +50,10 @@ def configure_authentication(mqtt_client):
         mqtt_password = os.getenv("MQTT_PASSWORD", "")
         if mqtt_password == "":
            raise ValueError('mqtt_password must set when mqtt_username is set')
-        print("Using username & password authentication")
+        logging.info("Using username & password authentication")
         mqtt_client.username_pw_set(os.environ["MQTT_USERNAME"], os.environ["MQTT_PASSWORD"])
         return
-    print("Using anonymous authentication")
-
-
-MQTT_TOPIC = os.getenv("MQTT_TOPIC", "iot-frames-model")
-MQTT_BROKER = os.getenv("MQTT_BROKER", "192.168.1.103")
-MQTT_PORT = os.getenv("MQTT_PORT", "1883")
-MQTT_QOS = os.getenv("MQTT_QOS", "1")
-UID = os.getenv("UID", "123456789")
+    logging.info("Using anonymous authentication")
 
 # Validate the config
 if MQTT_TOPIC == "":
@@ -61,16 +74,16 @@ def on_connect_cb(client: paho.Client, userdata: any, connect_flags: paho.Connec
                   reason_code: paho.ReasonCode, properties: paho.Properties):
     if reason_code == 0:
         mqtt_client.subscribe(topic=MQTT_TOPIC, qos=int(MQTT_QOS))
-        print(f"CONNECTED! ...{client.host}:{client.port}")
+        logging.info(f"CONNECTED! ...{client.host}:{client.port}")
     else:
-        print(f"ERROR! - ({reason_code.value}). {reason_code.getName()}")
+        logging.info(f"ERROR! - ({reason_code.value}). {reason_code.getName()}")
 
 # print message, useful for checking if it was successful
 def on_message_cb(client: paho.Client, userdata: any, msg: paho.MQTTMessage):
 
     # print(msg.topic + " " + str(msg.qos) + " " + str(msg.payload))
-    print(f"[{datetime.now()}] BROKER={MQTT_BROKER} PORT={MQTT_PORT} TOPIC={MQTT_TOPIC} QOS={str(msg.qos)}")
-    print(f"\tPAYLOAD={str(msg.payload)}")
+    logging.info(f"BROKER={MQTT_BROKER} PORT={MQTT_PORT} TOPIC={MQTT_TOPIC} QOS={str(msg.qos)}")
+    logging.info(f"PAYLOAD={str(msg.payload)}\n")
     try:
         # Decode and parse the JSON payload into a dictionary
         payload = json.loads(msg.payload.decode('utf-8'))
@@ -85,20 +98,20 @@ def on_message_cb(client: paho.Client, userdata: any, msg: paho.MQTTMessage):
         new_payload = json.dumps(payload).encode('utf-8')
 
     except json.JSONDecodeError:
-        print("Failed to decode JSON from MQTT message.")
+        logging.error("Failed to decode JSON from MQTT message.")
         message_key = str(msg.topic).replace("/", "-")
         new_payload = msg.payload  # fallback to original payload if decoding failed
 
 # print which topic was subscribed to
 def on_subscribe_cb(client: paho.Client, userdata: any, mid: int,
                     reason_code_list: list[paho.ReasonCode], properties: paho.Properties):
-    print("Subscribed: " + str(mid))
+    logging.info("Subscribed: " + str(mid))
     for reason_code in reason_code_list:
-        print(f"\tReason code ({reason_code.value}): {reason_code.getName()}")
+        logging.info(f"Reason code ({reason_code.value}): {reason_code.getName()}")
     
 def on_disconnect_cb(client: paho.Client, userdata: any, disconnect_flags: paho.DisconnectFlags,
                      reason_code: paho.ReasonCode, properties: paho.Properties):
-    print(f"DISCONNECTED! Reason code ({reason_code.value}) {reason_code.getName()}!")
+    logging.info(f"DISCONNECTED! Reason code ({reason_code.value}) {reason_code.getName()}!")
     
 mqtt_client.on_connect = on_connect_cb
 mqtt_client.on_message = on_message_cb
@@ -106,7 +119,7 @@ mqtt_client.on_subscribe = on_subscribe_cb
 mqtt_client.on_disconnect = on_disconnect_cb
 
 # connect to MQTT Cloud on port 8883 (default for MQTT)
-print(f"[{datetime.now()}] Connecting: {MQTT_BROKER}:{MQTT_PORT} ...")
+logging.info(f"Connecting: {MQTT_BROKER}:{MQTT_PORT} ...")
 mqtt_client.connect(MQTT_BROKER, int(MQTT_PORT))
 
 # start the background process to handle MQTT messages
@@ -114,9 +127,9 @@ mqtt_client.loop_start()
 
 # Define a handler function that will be called when SIGTERM is received
 def handle_sigterm(signum, frame):
-    print("SIGTERM received, terminating connection")
+    logging.info("SIGTERM received, terminating connection")
     mqtt_client.loop_stop()
-    print("Exiting")
+    logging.info("Exiting")
     sys.exit(0)
 
 # Register the handler for the SIGTERM signal
@@ -126,6 +139,6 @@ try:
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
-    print("Interrupted by the use, terminating connection")
+    logging.error("Interrupted by the use, terminating connection")
     mqtt_client.loop_stop() # clean up
-    print("Exiting")
+    logging.error("Exiting")
