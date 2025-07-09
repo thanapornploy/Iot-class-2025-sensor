@@ -6,6 +6,7 @@ from aiomqtt import Client
 import os
 from datetime import datetime
 import sys
+import logging
 
 if sys.platform.lower() == "win32" or os.name.lower() == "nt":
     from asyncio import set_event_loop_policy, WindowsSelectorEventLoopPolicy
@@ -20,6 +21,18 @@ MQTT_BROKER = os.getenv("MQTT_GATEWAY", "localhost") # user MQTT_GATEWAY to publ
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "iot-frames-model")
 MQTT_PORT = os.getenv("MQTT_PORT", "1883")
 MQTT_QOS = os.getenv("MQTT_QOS", "1")
+MQTT_QOS = os.getenv("MQTT_QOS", "1")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Logggin env
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_str, logging.INFO)
+
+logging.basicConfig(
+    level=log_level,
+    format='[%(asctime)s] [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 sensor_configs = [
     {
@@ -49,9 +62,9 @@ def calculate_fan_speed(temp, humidity, pressure=None, luminosity=None):
 async def publish_sensor(sensor_config):
     while True:
         try:
-            print(f"[{datetime.now()}] [{sensor_config['name']}] Connecting: {MQTT_BROKER}:{MQTT_PORT} ...")
+            logging.info(f"[{sensor_config['name']}] Connecting: {MQTT_BROKER}:{MQTT_PORT} ...")
             async with Client(MQTT_BROKER) as client:
-                print(f"[{datetime.now()}] [{sensor_config['name']}] Connected: {MQTT_BROKER}:{MQTT_PORT}")
+                logging.info(f"[{sensor_config['name']}] Connected: {MQTT_BROKER}:{MQTT_PORT}")
                 while True:
                     temperature = round(random.uniform(18, 35), 2)
                     humidity = random.randint(30, 90)
@@ -74,15 +87,17 @@ async def publish_sensor(sensor_config):
 
                     message = json.dumps(sensor_data)
                     await client.publish(topic=MQTT_TOPIC, payload=message.encode(), qos=int(MQTT_QOS))
-                    print(f"[{datetime.now()}] BROKER={MQTT_BROKER} PORT={MQTT_PORT} TOPIC={MQTT_TOPIC} QOS={MQTT_QOS}")
-                    print(f"[{datetime.now()}] Published: [{sensor_config['name']}] \n\tMessage: {message} \n\tTotal package size: topic={len(MQTT_TOPIC.encode())} + message={len(message.encode())} = {len(MQTT_TOPIC.encode()) + len(message.encode())} Bytes\n")
+                    logging.info(f"GATEWAY: {MQTT_BROKER} PORT={MQTT_PORT} TOPIC={MQTT_TOPIC} QOS={MQTT_QOS}")
+                    logging.info(f"PUBLISHED: sensor_name: {sensor_config['name']}")
+                    logging.info(f"MESSAGE: {message}")
+                    logging.info(f"TOTAL PACKAGE SIZE: topic={len(MQTT_TOPIC.encode())} + message={len(message.encode())} = {len(MQTT_TOPIC.encode()) + len(message.encode())} Bytes\n")
 
                     # await asyncio.sleep(random.uniform(1, 2))
                     await asyncio.sleep(5)
 
         except Exception as e:
-            print(f"[{datetime.now()}] [{sensor_config['name']}] Connection error: {e}")
-            print(f"[{datetime.now()}] [{sensor_config['name']}] Reconnecting in 5 seconds...\n")
+            logging.error(f"[[{sensor_config['name']}] Connection error: {e}")
+            logging.error(f"[[{sensor_config['name']}] Reconnecting in 5 seconds...\n")
             await asyncio.sleep(5)
 
 
@@ -93,4 +108,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print(f"[{datetime.now()}] Shutdown requested. Exiting...")
+        logging.info(f"Shutdown requested. Exiting...")
